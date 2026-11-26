@@ -58,20 +58,19 @@ export async function getTranscript(
   }
 }
 
-let schemaReady: Promise<unknown> | null = null;
+let schemaReady = false;
 
 /**
- * Per-isolate guard for request handlers: runs the schema checks once and
- * reuses the result for later requests instead of ~10 D1 round trips each
- * time. A failed run is retried on the next call. /api/setup calls
- * applySchema() directly so it always reports what it changed.
+ * Per-isolate guard for request handlers: once the schema checks have
+ * succeeded, later requests skip the ~14 D1 statements. Each request awaits
+ * its own run until then (no promise is shared across requests, so a
+ * canceled request cannot strand others). /api/setup calls applySchema()
+ * directly so it always reports what it changed.
  */
-export function ensureSchema(): Promise<unknown> {
-  schemaReady ??= applySchema().catch((error: unknown) => {
-    schemaReady = null;
-    throw error;
-  });
-  return schemaReady;
+export async function ensureSchema(): Promise<void> {
+  if (schemaReady) return;
+  await applySchema();
+  schemaReady = true;
 }
 
 export async function applySchema(): Promise<Array<string>> {
