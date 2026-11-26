@@ -58,7 +58,22 @@ export async function getTranscript(
   }
 }
 
-export async function ensureSchema(): Promise<Array<string>> {
+let schemaReady = false;
+
+/**
+ * Per-isolate guard for request handlers: once the schema checks have
+ * succeeded, later requests skip the ~14 D1 statements. Each request awaits
+ * its own run until then (no promise is shared across requests, so a
+ * canceled request cannot strand others). /api/setup calls applySchema()
+ * directly so it always reports what it changed.
+ */
+export async function ensureSchema(): Promise<void> {
+  if (schemaReady) return;
+  await applySchema();
+  schemaReady = true;
+}
+
+export async function applySchema(): Promise<Array<string>> {
   const applied: Array<string> = [];
 
   await env.DB.exec(
